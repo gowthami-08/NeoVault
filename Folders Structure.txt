@@ -1,19 +1,29 @@
-This file contains all the file structure for the bank Application --
-
-BankApplication (main folder)
-|__src(folder)
-  |_app.js(file)  
-|__config(folder)   
-   |__db.js(file)
-|__models(folder)
-   |__user.model.js(file)
-|__controllers(folder)
-   |__auth.controllers.js(file)
-|__routes(folder)
-   |__auth.routes.js(file)
-|__services(folder)
-   |__email.service.js(file)
-
-|_.env(file)
-|_server.js(file)
+BankApplication/
+├── server.js                   # Entry point – starts server & connects DB
+├── src/
+│   ├── app.js                  # Express app setup, middleware & routes
+│   ├── config/
+│   │   └── db.js               # MongoDB connection
+│   ├── models/
+│   │   ├── user.model.js       # User schema (email, name, password, SystemUser)
+│   │   ├── account.model.js    # Bank account schema
+│   │   ├── transaction.model.js# Transaction schema (PENDING/COMPLETED/FAILED/REVERSED)
+│   │   ├── ledger.model.js     # Double-entry ledger schema (DEBIT/CREDIT)
+│   │   └── blackList.model.js  # Blacklisted JWT tokens (auto-expire in 3 days)
+│   ├── controllers/
+│   │   ├── auth.controllers.js       # Register, Login, Logout
+│   │   ├── account.controller.js     # Create account, get accounts, get balance
+│   │   └── transaction.controller.js # Transfer funds, initial fund injection
+│   ├── middleware/
+│   │   └── auth.middleware.js  # JWT verification + blacklist check
+│   ├── routes/
+│   │   ├── auth.routes.js        # /api/auth/*
+│   │   ├── accounts.routes.js    # /api/accounts/*
+│   │   └── transaction.routes.js # /api/transactions/*
+│   └── services/
+│       └── email.service.js    # Nodemailer email service
+├── update_system_user.js       # Script to promote a user to System User
+├── .env                        # Environment variables (not committed)
+├── .gitignore
+└── package.json
 
