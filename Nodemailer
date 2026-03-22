@@ -1,0 +1,153 @@
+# 📧 Nodemailer with OAuth2 – Node.js
+
+This guide provides step-by-step instructions for setting up and using **Nodemailer** in a Node.js application with **OAuth2 authentication** using ClientID and ClientSecret, along with generating a refresh token using the **OAuth 2.0 Playground**.
+
+---
+
+## 📋 Prerequisites
+
+- Node.js installed on your machine.
+- A Google account to generate OAuth2 credentials (ClientID and ClientSecret).
+- Access to the [Google API Console](https://console.developers.google.com/) to create OAuth2 credentials.
+
+---
+
+## 🚀 Step 1: Enable Gmail API & Create OAuth2 Credentials
+
+1. Navigate to the [Google API Console](https://console.developers.google.com/).
+2. Create a new project or select an existing one.
+3. Go to the **Library** section, search for **Gmail API**, and enable it.
+4. Go to the **Credentials** section.
+5. Click on **Create Credentials** and choose **OAuth 2.0 Client IDs**.
+6. Set the application type to **Web application**.
+7. Under **Authorized redirect URIs**, add:
+   - `http://localhost`
+   - `https://developers.google.com/oauthplayground`
+8. After creating, you'll get your **ClientID** and **ClientSecret**.
+
+---
+
+## 🔑 Step 2: Generate a Refresh Token using OAuth 2.0 Playground
+
+1. Go to [OAuth 2.0 Playground](https://developers.google.com/oauthplayground).
+2. Click the ⚙️ settings icon (top right) and check **Use your own OAuth credentials**.
+3. Enter your **ClientID** and **ClientSecret**.
+4. In the left panel, find and select `https://mail.google.com/` under Gmail API v1.
+5. Click **Authorize APIs** and sign in with your Google account.
+6. Click **Exchange authorization code for tokens**.
+7. Copy the **Refresh Token**.
+
+---
+
+## 📦 Step 3: Install Dependencies
+```bash
+npm install nodemailer dotenv
+```
+
+---
+
+## 🔐 Step 4: Setup Environment Variables
+
+Create a `.env` file in your root directory:
+```env
+EMAIL_USER=your-email@gmail.com
+CLIENT_ID=your-client-id
+CLIENT_SECRET=your-client-secret
+REFRESH_TOKEN=your-refresh-token
+```
+
+---
+
+## ✉️ Step 5: Setup Nodemailer with OAuth2
+
+Create a new file `email.js` and set up the Nodemailer transporter with OAuth2:
+```js
+require('dotenv').config();
+const nodemailer = require('nodemailer');
+
+const transporter = nodemailer.createTransport({
+  service: 'gmail',
+  auth: {
+    type: 'OAuth2',
+    user: process.env.EMAIL_USER,
+    clientId: process.env.CLIENT_ID,
+    clientSecret: process.env.CLIENT_SECRET,
+    refreshToken: process.env.REFRESH_TOKEN,
+  },
+});
+
+// Verify the connection configuration
+transporter.verify((error, success) => {
+  if (error) {
+    console.error('Error connecting to email server:', error);
+  } else {
+    console.log('Email server is ready to send messages');
+  }
+});
+
+module.exports = transporter;
+```
+
+---
+
+## 📤 Step 6: Send Emails
+
+In the same `email.js` file, add a function to send emails:
+```js
+// Function to send email
+const sendEmail = async (to, subject, text, html) => {
+  try {
+    const info = await transporter.sendMail({
+      from: `"Your Name" <${process.env.EMAIL_USER}>`, // sender address
+      to,        // list of receivers
+      subject,   // Subject line
+      text,      // plain text body
+      html,      // html body
+    });
+    console.log('Message sent: %s', info.messageId);
+  } catch (error) {
+    console.error('Error sending email:', error);
+  }
+};
+
+module.exports = { transporter, sendEmail };
+```
+
+---
+
+## 🧪 Step 7: Use it in Your App
+```js
+const { sendEmail } = require('./email');
+
+sendEmail(
+  'recipient@example.com',
+  'Hello!',
+  'This is a plain text message.',
+  '<h1>This is an HTML message</h1>'
+);
+```
+
+---
+
+## 📁 Project Structure
+```
+├── email.js
+├── .env
+├── index.js
+└── package.json
+```
+
+---
+
+## 🛡️ Security Notes
+
+- Never commit your `.env` file. Add it to `.gitignore`.
+- Keep your **ClientSecret** and **RefreshToken** private.
+
+---
+
+## 📚 Resources
+
+- [Nodemailer Docs](https://nodemailer.com/)
+- [Google OAuth 2.0 Playground](https://developers.google.com/oauthplayground)
+- [Google API Console](https://console.developers.google.com/)
