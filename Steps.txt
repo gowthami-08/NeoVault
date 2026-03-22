@@ -1,25 +1,445 @@
-Steps we going to perform to complete this application --
+Steps we going to perform to complete this application
+========================================================
 
-1. cerate the folder (BankApplication)
-2. in terminal run npm init -y 
-3. now in the same terminal run the command npm i express (this is a package)
-4. now in the folder create another folder called src 
-5. in src folder create app.js file 
+================================================================
+PHASE 1 -- PROJECT SETUP
+================================================================
 
-Connecting MongoDB to server
-1.Go to the mongodb.cloud.atlas.com from there u have to login into your account
-2.after creating account create a project (Backend-Ledger) --projectName
-3.after creating project create a cluster (cluster 0) --clusterName
-4.after creating the cluster click createDBUser and then connectionMethod. 
-5.Once the DBUSer is cretaed you will be getting the connection Method select compass and copy the url shown 
-6.paste in .env file as MONGO_URI
-7.Now create an config folder and create a db.js file and writw the code for connecting the server to DB 
-8.after creating all the necessary files and writing the codes in terminal run npm run dev
-9.it should result in Connectd to DB
+1. Create the main project folder (BankApplication)
 
-Creating the Authentication and some end points 
-We will create folder models and inside that create user.model.js file
-We will create folder controllers and inside that create auth.controllers.js file
-We will create folder routes and inside that create auth.routes.js file
+2. Open the folder in terminal and run:
+      npm init -y
+   This creates the package.json file automatically.
+
+3. Install required packages by running:
+      npm i express mongoose dotenv bcryptjs jsonwebtoken cookie-parser nodemailer nodemon
+   - express      --> Web framework to build the server and APIs
+   - mongoose     --> ODM library to connect and interact with MongoDB
+   - dotenv       --> Loads environment variables from .env file
+   - bcryptjs     --> Used to hash and compare passwords securely
+   - jsonwebtoken --> Used to create and verify JWT tokens for authentication
+   - cookie-parser --> Used to parse cookies from the request
+   - nodemailer   --> Used to send emails (welcome email, transaction email)
+   - nodemon      --> Auto-restarts the server when file changes are detected (dev tool)
+
+4. In package.json, add the following scripts:
+      "dev": "npx nodemon server.js"
+      "start": "node server.js"
+
+5. Create a .env file in the root folder and add:
+      MONGO_URI=<your MongoDB connection string>
+      JWT_SECRET=<your secret key for jwt>
+      EMAIL_USER=<your gmail address>
+      EMAIL_PASS=<your gmail app password>
+
+6. Create the main entry file server.js in the root folder.
+   - It loads dotenv config
+   - It imports app from src/app.js
+   - It imports connectToDB from src/config/db.js
+   - It calls connectToDB() to connect to the database
+   - It starts the server on port 3000
+
+7. Inside the root folder create a src/ folder.
+   Inside src/ create the file app.js.
+   - This is the Express app configuration file
+   - It creates the express app instance
+   - It uses express.json() middleware to parse request body
+   - It uses cookieParser() middleware to parse cookies
+   - It registers all the route files under their base paths:
+       /api/auth        --> auth routes
+       /api/accounts    --> account routes
+       /api/transactions --> transaction routes
+   - It exports the app
+
+================================================================
+PHASE 2 -- CONNECTING MONGODB (MongoDB Atlas)
+================================================================
+
+1. Go to https://cloud.mongodb.com and login or sign up.
+
+2. Create a new Project and name it (e.g., Backend-Ledger).
+
+3. Inside the project, create a Cluster (e.g., Cluster0). Free tier is fine.
+
+4. After the cluster is created:
+   - Click "Database Access" and create a DB User with a username and password.
+   - Click "Network Access" and add your IP address (or allow all: 0.0.0.0/0).
+   - Click "Connect" on the cluster, choose "Compass" or "Drivers"
+     and copy the connection string shown.
+
+5. Paste the connection string in your .env file as:
+      MONGO_URI=<paste connection string here>
+   Replace <password> in the string with your actual DB user password.
+
+6. Create the folder src/config/ and inside it create the file db.js.
+   - Import mongoose
+   - Create a function connectToDB() that calls mongoose.connect(process.env.MONGO_URI)
+   - On success log "server is connected to DB"
+   - On failure log the error and call process.exit(1)
+   - Export the function
+
+7. Run the server with:
+      npm run dev
+   The terminal should show:
+      Server is running on port 3000
+      server is connected to DB
+
+================================================================
+PHASE 3 -- MODELS (Database Schemas)
+================================================================
+
+Create a folder src/models/ and inside create the following files:
+
+---- user.model.js ----
+   This model represents the registered users of the application.
+   Fields:
+   - email    (String, required, unique, lowercase, validated with regex)
+   - name     (String, required)
+   - password (String, required, min 6 chars, select:false so it is not returned in queries)
+   - SystemUser (Boolean, default false, immutable, select:false -- marks system/admin users)
+   - timestamps: true (auto adds createdAt and updatedAt)
+
+   Pre-save hook:
+   - Before saving, if password is modified, hash it using bcrypt with salt 10
+
+   Instance Method:
+   - comparePassword(password) -- uses bcrypt.compare() to match entered password
+     with the stored hash
+
+---- account.model.js ----
+   This model represents a bank account belonging to a user.
+   Fields:
+   - user       (ObjectId ref to user, required, indexed)
+   - systemUser (Boolean, default false -- marks if the account belongs to system user)
+   - status     (String, enum: ACTIVE / FROZEN / CLOSED, default ACTIVE)
+   - currency   (String, required, default INR)
+   - timestamps: true
+
+   Compound index on { user, status } for fast queries.
+
+   Instance Method:
+   - getBalance() -- uses MongoDB aggregation on the Ledger collection to calculate
+     the balance as: totalCredit - totalDebit for this account
+
+---- transaction.model.js ----
+   This model represents a money transfer between two accounts.
+   Fields:
+   - fromAccount   (ObjectId ref to account, required, indexed)
+   - toAccount     (ObjectId ref to account, required, indexed)
+   - status        (String, enum: PENDING / COMPLETED / FAILED / REVERSED, default PENDING)
+   - amount        (Number, required, min 0)
+   - idempotencyKey (String, required, unique, indexed)
+     --> prevents duplicate transactions if the same request is sent multiple times
+   - timestamps: true
+
+---- ledger.model.js ----
+   This is the accounting ledger that keeps an immutable record of every DEBIT and CREDIT.
+   Fields:
+   - account     (ObjectId ref to account, required, indexed, immutable)
+   - amount      (Number, required, immutable)
+   - transaction (ObjectId ref to transaction, required, indexed, immutable)
+   - type        (String, enum: CREDIT / DEBIT, required, immutable)
+
+   A preventLedgerModification() function is defined and attached to pre-hooks for:
+   findOneAndUpdate, updateOne, deleteOne, remove, deleteMany,
+   updateMany, findOneAndDelete, findOneAndReplace
+   --> This ensures ledger entries can NEVER be modified or deleted after creation.
+
+---- blackList.model.js ----
+   This model stores JWT tokens that have been invalidated (after logout).
+   Fields:
+   - token (String, required, unique)
+   - timestamps: true
+
+   TTL Index on createdAt with expireAfterSeconds = 259200 (3 days)
+   --> MongoDB automatically deletes blacklisted tokens after 3 days.
+
+================================================================
+PHASE 4 -- AUTHENTICATION (Register, Login, Logout)
+================================================================
+
+Create the folder src/controllers/ and inside it create auth.controllers.js.
+Create the folder src/routes/ and inside it create auth.routes.js.
+
+---- auth.controllers.js ----
+
+   userRegisterController  (POST /api/auth/register)
+   - Reads email, password, name from req.body
+   - Checks if user already exists with that email -- if yes, return 422 error
+   - Creates the user using userModel.create()
+   - Signs a JWT token with userId, secret from .env, expires in 3 days
+   - Sets the token as a cookie
+   - Returns 201 with user info and token
+   - Sends a welcome/registration email using emailService
+
+   userLoginController  (POST /api/auth/login)
+   - Reads email, password from req.body
+   - Finds the user by email and explicitly selects password field (select:"+password")
+   - If user not found or password does not match, return 401 error
+   - Uses user.comparePassword() to verify password
+   - Signs JWT token, sets cookie, returns 200 with user info and token
+
+   userLogoutController  (POST /api/auth/logout)
+   - Gets the token from cookies or Authorization header
+   - If no token, return 200 (already logged out)
+   - Clears the cookie
+   - Saves the token to tokenBlackListModel so it cannot be reused
+   - Returns 200 success message
+
+---- auth.routes.js ----
+   - POST /register  --> userRegisterController
+   - POST /login     --> userLoginController
+   - POST /logout    --> userLogoutController
+
+================================================================
+PHASE 5 -- MIDDLEWARE (JWT Authentication Guard)
+================================================================
+
+Create the folder src/middleware/ and inside it create auth.middleware.js.
+
+---- auth.middleware.js ----
+
+   authMiddleware  (protects regular user routes)
+   - Gets the token from req.cookies.token OR req.headers.authorization (Bearer token)
+   - If no token, return 401 Unauthorized
+   - Checks if token is in the blacklist (logged out tokens) -- if yes, return 401
+   - Verifies the token using jwt.verify() with JWT_SECRET
+   - Finds the user in DB using decoded.userId
+   - Attaches the user to req.user
+   - Calls next() to proceed to the route handler
+
+   authSystemUsermiddleware  (protects system/admin only routes)
+   - Same as above but also checks if user.SystemUser === true
+   - If user is not a system user, return 403 Forbidden
+   - Only system users can access protected system routes
+
+================================================================
+PHASE 6 -- ACCOUNT MANAGEMENT
+================================================================
+
+Create src/controllers/account.controller.js and src/routes/accounts.routes.js.
+
+---- account.controller.js ----
+
+   createAccountController  (POST /api/accounts/)
+   - Protected by authMiddleware (user must be logged in)
+   - Gets user from req.user (attached by middleware)
+   - Creates a new account for that user using accountModel.create()
+   - Returns 201 with the new account
+
+   getUserAccountsController  (GET /api/accounts/)
+   - Protected by authMiddleware
+   - Fetches all accounts belonging to req.user._id
+   - Returns 200 with list of accounts
+
+   getAccountBalanceController  (GET /api/accounts/balance/:accountId)
+   - Protected by authMiddleware
+   - Finds the account by accountId AND verifies it belongs to the logged-in user
+   - If not found, return 404
+   - Calls account.getBalance() which aggregates ledger entries (totalCredit - totalDebit)
+   - Returns 200 with accountId and balance
+
+---- accounts.routes.js ----
+   - POST /          --> authMiddleware + createAccountController
+   - GET /           --> authMiddleware + getUserAccountsController
+   - GET /balance/:accountId --> authMiddleware + getAccountBalanceController
+
+================================================================
+PHASE 7 -- TRANSACTION SYSTEM
+================================================================
+
+Create src/controllers/transaction.controller.js and src/routes/transaction.routes.js.
+
+---- transaction.controller.js ----
+
+   createTransaction  (POST /api/transactions/)             [10-Step Transfer Flow]
+   Protected by authMiddleware
+
+   Step 1 - Validate request:
+      - Requires fromAccount, toAccount, amount, idempotencyKey in req.body
+      - Finds both accounts in DB; if either not found, return 400
+
+   Step 2 - Validate idempotency key:
+      - Checks if a transaction with this idempotencyKey already exists
+      - If COMPLETED  --> return 200 "Transaction already processed"
+      - If PENDING    --> return 200 "Transaction already in progress"
+      - If FAILED     --> return 500 "Transaction already failed"
+      - If REVERSED   --> return 500 "Transaction already reversed"
+
+   Step 3 - Check account status:
+      - Both fromAccount and toAccount must have status = ACTIVE
+      - If not, return 400
+
+   Step 4 - Check sender balance:
+      - Calls fromUserAccount.getBalance() (from ledger aggregation)
+      - If balance < amount, return 400 "Insufficient Balance"
+
+   Steps 5-9 - Atomic MongoDB Transaction (session):
+      - Start a mongoose session and begin transaction
+      - Create the Transaction record with status PENDING
+      - Create a DEBIT ledger entry for fromAccount
+      - Create a CREDIT ledger entry for toAccount
+      - Update transaction status to COMPLETED
+      - Commit the session (all or nothing -- if anything fails, all changes rollback)
+      - End the session
+
+   Step 10 - Send email notification:
+      - Calls emailService.sendTransactionEmail() to notify the sender
+
+   createInitialFundsTransaction  (POST /api/transactions/system/initial-funds)
+   Protected by authSystemUsermiddleware (system user only)
+   - Used by the system user to deposit initial funds into any user's account
+   - Gets toAccount and amount from req.body
+   - Finds system user's own account as fromAccount
+   - Creates DEBIT ledger for system account and CREDIT ledger for target account
+   - Commits through a mongoose session
+   - Returns 201 with transaction details
+
+---- transaction.routes.js ----
+   - POST /                     --> authMiddleware + createTransaction
+   - POST /system/initial-funds --> authSystemUsermiddleware + createInitialFundsTransaction
+
+================================================================
+PHASE 8 -- EMAIL SERVICE (Nodemailer)
+================================================================
+
+Create the folder src/services/ and inside it create email.service.js.
+
+---- email.service.js ----
+   - Uses nodemailer to send automated emails via Gmail SMTP
+   - Creates a transporter using Gmail service with EMAIL_USER and EMAIL_PASS from .env
+   - EMAIL_PASS must be a Gmail App Password (not your real Gmail password)
+     To get it: Google Account --> Security --> 2-Step Verification --> App Passwords
+
+   - transporter.verify() checks if the email server connection is working on startup
+
+   sendEmail(to, subject, text, html)
+   - Core reusable function that sends any email using the transporter
+
+   sendRegistrationEmail(userEmail, name)
+   - Called after a user registers
+   - Sends a welcome message to the user's email
+
+   sendTransactionEmail(userEmail, name, amount, toUseraccount)
+   - Called after a transaction is completed successfully
+   - Sends a transaction confirmation to the sender
+
+   sendTransactionFailedEmail(userEmail, name, amount, toUseraccount)
+   - Called when a transaction fails
+   - Sends a failure notification to the sender
+
+================================================================
+PHASE 9 -- SYSTEM USER SETUP
+================================================================
+
+The System User is a special bank account that holds all the bank's initial funds.
+All user accounts start with zero balance. To add money to any user account,
+the system user must initiate an initial-funds transaction.
+
+Steps to set up the System User:
+
+1. Register a new user in Postman using POST /api/auth/register with:
+      { "email": "system@test.com", "name": "System", "password": "system123" }
+
+2. Create an account for this user using POST /api/accounts/ with the system user's token.
+
+3. Now run the script update_system_user.js to set SystemUser = true for this user:
+      node update_system_user.js
+   This script:
+   - Connects to the DB
+   - Finds the user with email system@test.com
+   - Sets SystemUser: true on the user document
+   - Sets systemUser: true on the account document
+
+4. Login as system user -- POST /api/auth/login
+   Use the token from this login to call:
+      POST /api/transactions/system/initial-funds
+   with body:
+      { "toAccount": "<target user accountId>", "amount": 10000, "idempotencyKey": "unique-key-1" }
+   This deposits funds into any user account from the system account.
+
+================================================================
+PHASE 10 -- TESTING THE API (Using Postman)
+================================================================
+
+All endpoints and their details:
+
+AUTH ROUTES (base: /api/auth)
+   POST /api/auth/register      --> Register a new user
+      Body: { "email": "", "name": "", "password": "" }
+
+   POST /api/auth/login         --> Login with email and password
+      Body: { "email": "", "password": "" }
+
+   POST /api/auth/logout        --> Logout (blacklists the token)
+      Headers: Authorization: Bearer <token>  OR cookie
+
+ACCOUNT ROUTES (base: /api/accounts)  -- all protected (need token)
+   POST /api/accounts/          --> Create a new bank account for logged-in user
+   GET  /api/accounts/          --> Get all accounts of logged-in user
+   GET  /api/accounts/balance/:accountId --> Get balance of a specific account
+
+TRANSACTION ROUTES (base: /api/transactions)  -- all protected
+   POST /api/transactions/      --> Transfer money between two accounts
+      Body: { "fromAccount": "", "toAccount": "", "amount": 100, "idempotencyKey": "unique-key" }
+
+   POST /api/transactions/system/initial-funds  --> Deposit initial funds (system user only)
+      Body: { "toAccount": "", "amount": 5000, "idempotencyKey": "unique-key-2" }
+
+================================================================
+COMPLETE FOLDER STRUCTURE
+================================================================
+
+BankApplication/
+   server.js             -- Entry point, starts server and connects to DB
+   .env                  -- Environment variables (MONGO_URI, JWT_SECRET, EMAIL_USER, EMAIL_PASS)
+   .gitignore            -- Ignores node_modules and .env
+   package.json          -- Project metadata and scripts
+   update_system_user.js -- One-time script to promote a user to SystemUser
+
+   src/
+      app.js             -- Creates Express app, registers middleware and routes
+
+      config/
+         db.js           -- MongoDB connection using mongoose
+
+      models/
+         user.model.js         -- User schema (email, name, password, SystemUser)
+         account.model.js      -- Account schema (user, status, currency) + getBalance()
+         transaction.model.js  -- Transaction schema (fromAccount, toAccount, amount, idempotencyKey)
+         ledger.model.js       -- Immutable ledger entries (CREDIT / DEBIT per account)
+         blackList.model.js    -- Blacklisted JWT tokens (auto-expire in 3 days)
+
+      controllers/
+         auth.controllers.js       -- register, login, logout logic
+         account.controller.js     -- create account, get accounts, get balance
+         transaction.controller.js -- createTransaction, createInitialFundsTransaction
+
+      routes/
+         auth.routes.js        -- /api/auth routes
+         accounts.routes.js    -- /api/accounts routes
+         transaction.routes.js -- /api/transactions routes
+
+      middleware/
+         auth.middleware.js    -- authMiddleware and authSystemUsermiddleware
+
+      services/
+         email.service.js      -- sendRegistrationEmail, sendTransactionEmail, sendTransactionFailedEmail
+
+================================================================
+TO RUN THE PROJECT
+================================================================
+
+1. Make sure MongoDB Atlas cluster is running and MONGO_URI is correct in .env
+2. Make sure Gmail App Password is set in .env as EMAIL_PASS
+3. Run the server:
+      npm run dev
+4. Server starts at http://localhost:3000
+5. Test all endpoints using Postman
+
+================================================================
+END OF STEPS
+================================================================
+
 
 
