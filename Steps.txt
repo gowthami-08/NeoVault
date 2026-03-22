@@ -1,0 +1,25 @@
+Steps we going to perform to complete this application --
+
+1. cerate the folder (BankApplication)
+2. in terminal run npm init -y 
+3. now in the same terminal run the command npm i express (this is a package)
+4. now in the folder create another folder called src 
+5. in src folder create app.js file 
+
+Connecting MongoDB to server
+1.Go to the mongodb.cloud.atlas.com from there u have to login into your account
+2.after creating account create a project (Backend-Ledger) --projectName
+3.after creating project create a cluster (cluster 0) --clusterName
+4.after creating the cluster click createDBUser and then connectionMethod. 
+5.Once the DBUSer is cretaed you will be getting the connection Method select compass and copy the url shown 
+6.paste in .env file as MONGO_URI
+7.Now create an config folder and create a db.js file and writw the code for connecting the server to DB 
+8.after creating all the necessary files and writing the codes in terminal run npm run dev
+9.it should result in Connectd to DB
+
+Creating the Authentication and some end points 
+We will create folder models and inside that create user.model.js file
+We will create folder controllers and inside that create auth.controllers.js file
+We will create folder routes and inside that create auth.routes.js file
+
+

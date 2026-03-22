@@ -1,0 +1,19 @@
+This file contains all the file structure for the bank Application --
+
+BankApplication (main folder)
+|__src(folder)
+  |_app.js(file)  
+|__config(folder)   
+   |__db.js(file)
+|__models(folder)
+   |__user.model.js(file)
+|__controllers(folder)
+   |__auth.controllers.js(file)
+|__routes(folder)
+   |__auth.routes.js(file)
+|__services(folder)
+   |__email.service.js(file)
+
+|_.env(file)
+|_server.js(file)
+
